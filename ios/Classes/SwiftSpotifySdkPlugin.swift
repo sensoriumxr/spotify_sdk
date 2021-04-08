@@ -47,6 +47,8 @@ public class SwiftSpotifySdkPlugin: NSObject, FlutterPlugin {
                 return
             }
 
+            let spotifyUri: String = swiftArguments[SpotfySdkConstants.paramSpotifyUri] as? String ?? ""
+
             guard let url = swiftArguments[SpotfySdkConstants.paramRedirectUrl] as? String,
                   !url.isEmpty else {
                 result(FlutterError(code: "Argument Error", message: "Redirect URL is not set", details: nil))
@@ -59,7 +61,7 @@ public class SwiftSpotifySdkPlugin: NSObject, FlutterPlugin {
             } else {
                 connectionStatusHandler?.connectionResult = result
                 do {
-                    try connectToSpotify(clientId: clientID, redirectURL: url, asRadio: swiftArguments[SpotfySdkConstants.paramAsRadio] as? Bool, additionalScopes: swiftArguments[SpotfySdkConstants.scope] as? String)
+                    try connectToSpotify(clientId: clientID, redirectURL: url, spotifyUri: spotifyUri, asRadio: swiftArguments[SpotfySdkConstants.paramAsRadio] as? Bool, additionalScopes: swiftArguments[SpotfySdkConstants.scope] as? String)
                 }
                 catch SpotifyError.redirectURLInvalid {
                     result(FlutterError(code: "errorConnecting", message: "Redirect URL is not set or has invalid format", details: nil))
@@ -77,8 +79,10 @@ public class SwiftSpotifySdkPlugin: NSObject, FlutterPlugin {
                     return
             }
             connectionStatusHandler?.tokenResult = result
+
+            let spotifyUri: String = swiftArguments[SpotfySdkConstants.paramSpotifyUri] as? String ?? ""
             do {
-                try connectToSpotify(clientId: clientID, redirectURL: url, asRadio: swiftArguments[SpotfySdkConstants.paramAsRadio] as? Bool, additionalScopes: swiftArguments[SpotfySdkConstants.scope] as? String)
+                try connectToSpotify(clientId: clientID, redirectURL: url, spotifyUri: spotifyUri, asRadio: swiftArguments[SpotfySdkConstants.paramAsRadio] as? Bool, additionalScopes: swiftArguments[SpotfySdkConstants.scope] as? String)
             }
             catch {
                 result(FlutterError(code: "CouldNotFindSpotifyApp", message: "The Spotify app is not installed on the device", details: nil))
@@ -264,7 +268,7 @@ public class SwiftSpotifySdkPlugin: NSObject, FlutterPlugin {
         }
     }
 
-    private func connectToSpotify(clientId: String, redirectURL: String, accessToken: String? = nil, asRadio: Bool?, additionalScopes: String? = nil) throws {
+    private func connectToSpotify(clientId: String, redirectURL: String, accessToken: String? = nil, spotifyUri: String = "", asRadio: Bool?, additionalScopes: String? = nil) throws {
         guard let redirectURL = URL(string: redirectURL) else {
             throw SpotifyError.redirectURLInvalid
         }
@@ -286,7 +290,7 @@ public class SwiftSpotifySdkPlugin: NSObject, FlutterPlugin {
         }
 
         // Note: A blank string will play the user's last song or pick a random one.
-        if self.appRemote?.authorizeAndPlayURI("", asRadio: asRadio ?? false, additionalScopes: scopes) == false {
+        if self.appRemote?.authorizeAndPlayURI(spotifyUri, asRadio: asRadio ?? false, additionalScopes: scopes) == false {
             throw SpotifyError.spotifyNotInstalledError
         }
     }
