@@ -1,3 +1,53 @@
+## 3.0.0-dev.3
+* Fix: prevent multiple iOS initializations (#203)
+* Chore: Update libraries (#202)
+* Feat: Automatic setup of the android integration of the spotify_sdk (#204)
+
+## 3.0.0-dev.2
+* Feat: add set podcastPlaybackSpeed and switchToLocalDevice for android (#160)
+
+## 3.0.0-dev.1
+* **BREAKINg**:feat: update spotify.android:auth from 1.2.6 to 2.1.0 and spotify.app.remote from 0.7.2 to 0.8.0
+  In the app/build.gradle add the following to the default config for auth to work as described [here](https://github.com/spotify/android-auth#integrating-the-library-into-your-project)
+  ```groovy
+  defaultConfig {
+          manifestPlaceholders = [redirectSchemeName: "spotify-sdk", redirectHostName: "auth"]
+          ...
+      }
+  ```
+* Update android target sdk to 34
+
+## 2.3.1
+* Fix: null album when getting advertisement on android (#179)
+* Fix: queue endpoint for web (#167)
+* Update license to apache-2.0
+
+## 2.3.0
+* iOS, Android and Web
+  * getAuthenticationToken is deprecated in favor of getAccessToken
+* Android:
+  * `spotify-auth` SDK is now retrieved via Maven Central instead of being sourced from an AAR file
+    * Steps to remove the `spotify-auth` SDK:
+      * android/settings.gradle -> remove `':spotify-auth'` 
+      * android/spotify-auth/build.gradle -> remove file
+      * android/spotify-auth/spotify-auth-release-x.x.x.aar -> remove file
+
+## 2.2.0
+* iOS and Android
+  * adds SkipToIndex and getCapabilities 
+  * adds isSpotifyAppActive 
+  * adds getLibraryState on iOS
+  * Switch to native Spotify iOS XCFramework
+  * fixes android json mapping error on release builds  
+  * fixes skipPrevious on iOS
+* web
+  * adds use accessToken which implies reusing _spotifyToken from getAuthenticationToken
+  * adds optional tokenSwapURL and tokenRefreshURL for Authorization Code (without PKCE)
+  * adds support for track relinking
+  * fixes browser autoplay error  
+* updates libraries
+* updates documentation
+
 ## 2.1.0
 * BREAKING: setShuffle now does not expect a named argument
 * fixes accessToken being ignored in connectToSpotify()

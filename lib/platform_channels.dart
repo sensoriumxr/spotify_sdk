@@ -27,8 +27,8 @@ class MethodNames {
   /// method name for [connectToSpotify]
   static const String connectToSpotify = 'connectToSpotify';
 
-  /// method name for [getAuthenticationToken]
-  static const String getAuthenticationToken = 'getAuthenticationToken';
+  /// method name for [getAccessToken]
+  static const String getAccessToken = 'getAccessToken';
 
   /// method name for [disconnectFromSpotify]
   static const String disconnectFromSpotify = 'disconnectFromSpotify';
@@ -53,6 +53,9 @@ class MethodNames {
 
   /// method name for [resume]
   static const String resume = 'resume';
+
+  /// method name for [podcastPlaybackSpeed]
+  static const String setPodcastPlaybackSpeed = 'setPodcastPlaybackSpeed';
 
   /// method name for [skipToIndex]
   static const String skipToIndex = 'skipToIndex';
@@ -104,6 +107,9 @@ class MethodNames {
 
   /// method name for [setRepeatMode]
   static const String setRepeatMode = 'setRepeatMode';
+
+  /// method name for [switchToLocalDevice]
+  static const String switchToLocalDevice = "switchToLocalDevice";
 }
 
 /// Holds the names for all parameters that are used in the package
@@ -146,6 +152,9 @@ class ParamNames {
 
   /// param name for [repeatMode]
   static const String repeatMode = 'repeatMode';
+
+  /// param name for [podcastPlaybackSpeed]
+  static const String podcastPlaybackSpeed = 'podcastPlaybackSpeed';
 
   /// param name for [uri]
   static const String uri = 'uri';

@@ -1,5 +1,7 @@
 package de.minimalme.spotify_sdk
 
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.spotify.android.appremote.api.ConnectionParams
@@ -10,52 +12,63 @@ import com.spotify.sdk.android.auth.AuthorizationClient
 import com.spotify.sdk.android.auth.AuthorizationRequest
 import com.spotify.sdk.android.auth.AuthorizationResponse
 import de.minimalme.spotify_sdk.subscriptions.*
+import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.PluginRegistry
-import io.flutter.plugin.common.PluginRegistry.Registrar
 import kotlinx.event.SetEvent
 import kotlinx.event.event
+import io.flutter.plugin.common.BinaryMessenger
+import io.flutter.plugin.common.PluginRegistry.Registrar
 
-
-class SpotifySdkPlugin(private val registrar: Registrar) : MethodCallHandler, PluginRegistry.ActivityResultListener {
-
+class SpotifySdkPlugin : MethodCallHandler, FlutterPlugin, ActivityAware, PluginRegistry.ActivityResultListener {
 
     companion object {
-
-        private lateinit var channel: MethodChannel
-        private const val CHANNEL_NAME = "spotify_sdk"
-        private const val PLAYER_CONTEXT_SUBSCRIPTION = "player_context_subscription"
-        private const val PLAYER_STATE_SUBSCRIPTION = "player_state_subscription"
-        private const val CAPABILITIES__SUBSCRIPTION = "capabilities_subscription"
-        private const val USER_STATUS_SUBSCRIPTION = "user_status_subscription"
-        private const val CONNECTION_STATUS_SUBSCRIPTION = "connection_status_subscription"
-
+        /** Plugin registration.  */
+        @SuppressWarnings("deprecation")
         @JvmStatic
         fun registerWith(registrar: Registrar) {
-            channel = MethodChannel(registrar.messenger(), CHANNEL_NAME)
-            val spotifySdkPluginInstance = SpotifySdkPlugin(registrar)
-
-            channel.setMethodCallHandler(spotifySdkPluginInstance)
-            registrar.addActivityResultListener(spotifySdkPluginInstance)
+            val instance = SpotifySdkPlugin()
+            instance.onAttachedToEngine(registrar.context(), registrar.messenger())
         }
     }
 
-    private val playerContextChannel = EventChannel(registrar.messenger(), PLAYER_CONTEXT_SUBSCRIPTION)
-    private val playerStateChannel = EventChannel(registrar.messenger(), PLAYER_STATE_SUBSCRIPTION)
-    private val capabilitiesChannel = EventChannel(registrar.messenger(), CAPABILITIES__SUBSCRIPTION)
-    private val userStatusChannel = EventChannel(registrar.messenger(), USER_STATUS_SUBSCRIPTION)
-    private val connectionStatusChannel = EventChannel(registrar.messenger(), CONNECTION_STATUS_SUBSCRIPTION)
+    // application context
+    private var applicationContext : Context? = null
+    private var applicationActivity : Activity? = null
+
+    // method channel
+    private var methodChannel: MethodChannel? = null
+    private val channelName = "spotify_sdk"
+    private val loggingTag = "spotify_sdk"
+
+    // event channels
+    private var playerContextChannel : EventChannel? = null
+    private var playerStateChannel : EventChannel? = null
+    private var capabilitiesChannel : EventChannel? = null
+    private var userStatusChannel : EventChannel? = null
+    private var connectionStatusChannel : EventChannel? = null
+
+    private val playerContextSubscription = "player_context_subscription"
+    private val playerStateSubscription = "player_state_subscription"
+    private val capabilitiesSubscription = "capabilities_subscription"
+    private val userStatusSubscription = "user_status_subscription"
+    private val connectionStatusSubscription = "connection_status_subscription"
 
     //connecting
     private val methodConnectToSpotify = "connectToSpotify"
-    private val methodGetAuthenticationToken = "getAuthenticationToken"
+    private val methodGetAccessToken = "getAccessToken"
     private val methodDisconnectFromSpotify = "disconnectFromSpotify"
 
-    //player api
+    // connectApi
+    private val methodSwitchToLocalDevice = "switchToLocalDevice"
+
+    //playerApi
     private val methodGetCrossfadeState = "getCrossfadeState"
     private val methodGetPlayerState = "getPlayerState"
     private val methodPlay = "play"
@@ -74,13 +87,13 @@ class SpotifySdkPlugin(private val registrar: Registrar) : MethodCallHandler, Pl
     private val methodSetRepeatMode = "setRepeatMode"
     private val methodIsSpotifyAppActive = "isSpotifyAppActive"
 
-    //user api
+    //userApi
     private val methodAddToLibrary = "addToLibrary"
     private val methodRemoveFromLibrary = "removeFromLibrary"
     private val methodGetCapabilities = "getCapabilities"
     private val methodGetLibraryState = "getLibraryState"
 
-    //images api
+    //imagesApi
     private val methodGetImage = "getImage"
 
     private val paramClientId = "clientId"
@@ -108,11 +121,49 @@ class SpotifySdkPlugin(private val registrar: Registrar) : MethodCallHandler, Pl
     private var pendingOperation: PendingOperation? = null
     private var spotifyAppRemote: SpotifyAppRemote? = null
     private var spotifyPlayerApi: SpotifyPlayerApi? = null
+    private var spotifyConnectApi: SpotifyConnectApi? = null
     private var spotifyUserApi: SpotifyUserApi? = null
     private var spotifyImagesApi: SpotifyImagesApi? = null
 
-    init {
-        connectionStatusChannel.setStreamHandler(ConnectionStatusChannel(connStatusEventChannel))
+    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        onAttachedToEngine(binding.applicationContext, binding.binaryMessenger)
+    }
+
+    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+
+        applicationContext = null
+
+        methodChannel?.setMethodCallHandler(null)
+        methodChannel = null
+
+        playerContextChannel?.setStreamHandler(null)
+        playerStateChannel?.setStreamHandler(null)
+        capabilitiesChannel?.setStreamHandler(null)
+        userStatusChannel?.setStreamHandler(null)
+        connectionStatusChannel?.setStreamHandler(null)
+
+        playerContextChannel = null
+        playerStateChannel = null
+        capabilitiesChannel = null
+        userStatusChannel = null
+        connectionStatusChannel = null
+    }
+
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        binding.addActivityResultListener(this)
+        applicationActivity = binding.activity
+    }
+
+    override fun onDetachedFromActivityForConfigChanges() {
+        applicationActivity = null
+    }
+
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        applicationActivity = binding.activity
+    }
+
+    override fun onDetachedFromActivity() {
+        applicationActivity = null
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
@@ -121,14 +172,17 @@ class SpotifySdkPlugin(private val registrar: Registrar) : MethodCallHandler, Pl
             spotifyPlayerApi = SpotifyPlayerApi(spotifyAppRemote, result)
             spotifyUserApi = SpotifyUserApi(spotifyAppRemote, result)
             spotifyImagesApi = SpotifyImagesApi(spotifyAppRemote, result)
+            spotifyConnectApi = SpotifyConnectApi(spotifyAppRemote, result)
         }
 
         when (call.method) {
             //connecting to spotify
             methodConnectToSpotify -> connectToSpotify(call.argument(paramClientId), call.argument(paramRedirectUrl), result)
-            methodGetAuthenticationToken -> getAuthenticationToken(call.argument(paramClientId), call.argument(paramRedirectUrl), call.argument(paramScope), result)
+            methodGetAccessToken -> getAccessToken(call.argument(paramClientId), call.argument(paramRedirectUrl), call.argument(paramScope), result)
             methodDisconnectFromSpotify -> disconnectFromSpotify(result)
-            //player api calls
+            //connectApi calls
+            methodSwitchToLocalDevice -> spotifyConnectApi?.switchToLocalDevice()
+            //playerApi calls
             methodGetCrossfadeState -> spotifyPlayerApi?.getCrossfadeState()
             methodGetPlayerState -> spotifyPlayerApi?.getPlayerState()
             methodPlay -> spotifyPlayerApi?.play(call.argument(paramSpotifyUri))
@@ -146,16 +200,32 @@ class SpotifySdkPlugin(private val registrar: Registrar) : MethodCallHandler, Pl
             methodToggleRepeat -> spotifyPlayerApi?.toggleRepeat()
             methodSetRepeatMode -> spotifyPlayerApi?.setRepeatMode(call.argument(paramRepeatMode))
             methodIsSpotifyAppActive -> spotifyPlayerApi?.isSpotifyAppActive()
-            //user api calls
+            //userApi calls
             methodAddToLibrary -> spotifyUserApi?.addToUserLibrary(call.argument(paramSpotifyUri))
             methodRemoveFromLibrary -> spotifyUserApi?.removeFromUserLibrary(call.argument(paramSpotifyUri))
             methodGetCapabilities -> spotifyUserApi?.getCapabilities()
             methodGetLibraryState -> spotifyUserApi?.getLibraryState(call.argument(paramSpotifyUri))
-            //image api calls
+            //imageApi calls
             methodGetImage -> spotifyImagesApi?.getImage(call.argument(paramImageUri), call.argument(paramImageDimension))
             // method call is not implemented yet
             else -> result.notImplemented()
         }
+    }
+
+    private fun onAttachedToEngine(applicationContext: Context, messenger: BinaryMessenger) {
+
+        this.applicationContext = applicationContext
+
+        methodChannel = MethodChannel(messenger, channelName)
+        methodChannel?.setMethodCallHandler(this)
+
+        playerContextChannel = EventChannel(messenger, playerContextSubscription)
+        playerStateChannel = EventChannel(messenger, playerStateSubscription)
+        capabilitiesChannel = EventChannel(messenger, capabilitiesSubscription)
+        userStatusChannel = EventChannel(messenger, userStatusSubscription)
+        connectionStatusChannel = EventChannel(messenger, connectionStatusSubscription)
+
+        connectionStatusChannel?.setStreamHandler(ConnectionStatusChannel(connStatusEventChannel))
     }
 
     //-- Method implementations
@@ -170,16 +240,22 @@ class SpotifySdkPlugin(private val registrar: Registrar) : MethodCallHandler, Pl
                     .build()
             SpotifyAppRemote.disconnect(spotifyAppRemote)
             var initiallyConnected = false
-            SpotifyAppRemote.connect(registrar.context(), connectionParams,
+            SpotifyAppRemote.connect(applicationContext, connectionParams,
                     object : ConnectionListener {
                         override fun onConnected(spotifyAppRemoteValue: SpotifyAppRemote) {
                             spotifyAppRemote = spotifyAppRemoteValue
-                            playerContextChannel.setStreamHandler(PlayerContextChannel(spotifyAppRemote!!.playerApi))
-                            playerStateChannel.setStreamHandler(PlayerStateChannel(spotifyAppRemote!!.playerApi))
-                            capabilitiesChannel.setStreamHandler(CapabilitiesChannel(spotifyAppRemote!!.userApi))
-                            userStatusChannel.setStreamHandler(UserStatusChannel(spotifyAppRemote!!.userApi))
 
+                            playerContextChannel?.setStreamHandler(PlayerContextChannel(spotifyAppRemote!!.playerApi))
+                            Log.i(loggingTag, "Set stream handler for PlayerContextChannel")
+                            playerStateChannel?.setStreamHandler(PlayerStateChannel(spotifyAppRemote!!.playerApi))
+                            Log.i(loggingTag, "Set stream handler for PlayerStateChannel")
+                            capabilitiesChannel?.setStreamHandler(CapabilitiesChannel(spotifyAppRemote!!.userApi))
+                            Log.i(loggingTag, "Set stream handler for CapabilitiesChannel")
+                            userStatusChannel?.setStreamHandler(UserStatusChannel(spotifyAppRemote!!.userApi))
+                            Log.i(loggingTag, "Set stream handler for UserStatusChannel")
                             initiallyConnected = true
+
+                            Log.i(loggingTag, "App Remote successfully connected")
                             // emit connection established event
                             connStatusEventChannel(ConnectionStatusChannel.ConnectionEvent(true, "Successfully connected to Spotify.", null, null))
                             // method success
@@ -235,7 +311,7 @@ class SpotifySdkPlugin(private val registrar: Registrar) : MethodCallHandler, Pl
                                     errorCode = errorConnection
                                 }
                             }
-                            Log.e("SPOTIFY_SDK", errorMessage)
+                            Log.e(loggingTag, errorMessage)
                             // notify plugin
                             if (initiallyConnected) {
                                 // emit connection error event
@@ -249,9 +325,9 @@ class SpotifySdkPlugin(private val registrar: Registrar) : MethodCallHandler, Pl
         }
     }
 
-    private fun getAuthenticationToken(clientId: String?, redirectUrl: String?, scope: String?, result: Result) {
-        if (registrar.activity() == null) {
-            throw IllegalStateException("getAuthenticationToken needs a foreground activity")
+    private fun getAccessToken(clientId: String?, redirectUrl: String?, scope: String?, result: Result) {
+        if (applicationActivity == null) {
+            throw IllegalStateException("getAccessToken needs a foreground activity")
         }
 
         if (clientId.isNullOrBlank() || redirectUrl.isNullOrBlank()) {
@@ -265,7 +341,7 @@ class SpotifySdkPlugin(private val registrar: Registrar) : MethodCallHandler, Pl
             builder.setScopes(scopeArray)
             val request = builder.build()
 
-            AuthorizationClient.openLoginActivity(registrar.activity(), requestCodeAuthentication, request)
+            AuthorizationClient.openLoginActivity(applicationActivity, requestCodeAuthentication, request)
         }
     }
 
@@ -320,8 +396,6 @@ class SpotifySdkPlugin(private val registrar: Registrar) : MethodCallHandler, Pl
         }
         pendingOperation = PendingOperation(this, result)
     }
-
-
 }
 
 private class PendingOperation internal constructor(val method: String, val result: Result)

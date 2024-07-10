@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:logger/logger.dart';
 import 'package:spotify_sdk/models/connection_status.dart';
@@ -17,27 +15,43 @@ import 'widgets/sized_icon_button.dart';
 
 Future<void> main() async {
   await dotenv.load(fileName: '.env');
-  runApp(Home());
+  runApp(const Home());
 }
 
 /// A [StatefulWidget] which uses:
 /// * [spotify_sdk](https://pub.dev/packages/spotify_sdk)
 /// to connect to Spotify and use controls.
 class Home extends StatefulWidget {
+  const Home({super.key});
+
   @override
-  _HomeState createState() => _HomeState();
+  HomeState createState() => HomeState();
 }
 
-class _HomeState extends State<Home> {
+class HomeState extends State<Home> {
   bool _loading = false;
   bool _connected = false;
-  final Logger _logger = Logger();
+  final Logger _logger = Logger(
+    //filter: CustomLogFilter(), // custom logfilter can be used to have logs in release mode
+    printer: PrettyPrinter(
+      methodCount: 2, // number of method calls to be displayed
+      errorMethodCount: 8, // number of method calls if stacktrace is provided
+      lineLength: 120, // width of the output
+      colors: true, // Colorful log messages
+      printEmojis: true, // Print an emoji for each log message
+      printTime: true,
+    ),
+  );
 
   CrossfadeState? crossfadeState;
+  late ImageUri? currentTrackImageUri;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      theme: ThemeData(
+        useMaterial3: true,
+      ),
       home: StreamBuilder<ConnectionStatus>(
         stream: SpotifySdk.subscribeConnectionStatus(),
         builder: (context, snapshot) {
@@ -53,13 +67,13 @@ class _HomeState extends State<Home> {
                 _connected
                     ? IconButton(
                         onPressed: disconnect,
-                        icon: Icon(Icons.exit_to_app),
+                        icon: const Icon(Icons.exit_to_app),
                       )
                     : Container()
               ],
             ),
             body: _sampleFlowWidget(context),
-            bottomNavigationBar: _buildBottomBar(context),
+            bottomNavigationBar: _connected ? _buildBottomBar(context) : null,
           );
         },
       ),
@@ -68,34 +82,10 @@ class _HomeState extends State<Home> {
 
   Widget _buildBottomBar(BuildContext context) {
     return BottomAppBar(
+      height: 125,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: <Widget>[
-              SizedIconButton(
-                width: 50,
-                icon: Icons.skip_previous,
-                onPressed: skipPrevious,
-              ),
-              SizedIconButton(
-                width: 50,
-                icon: Icons.play_arrow,
-                onPressed: resume,
-              ),
-              SizedIconButton(
-                width: 50,
-                icon: Icons.pause,
-                onPressed: pause,
-              ),
-              SizedIconButton(
-                width: 50,
-                icon: Icons.skip_next,
-                onPressed: skipNext,
-              ),
-            ],
-          ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: <Widget>[
@@ -106,7 +96,7 @@ class _HomeState extends State<Home> {
               ),
               SizedIconButton(
                 width: 50,
-                icon: Icons.play_circle_filled,
+                icon: Icons.playlist_play,
                 onPressed: play,
               ),
               SizedIconButton(
@@ -145,7 +135,7 @@ class _HomeState extends State<Home> {
     return Stack(
       children: [
         ListView(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(16),
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -155,18 +145,15 @@ class _HomeState extends State<Home> {
                   child: const Icon(Icons.settings_remote),
                 ),
                 TextButton(
-                  onPressed: getAuthenticationToken,
+                  onPressed: getAccessToken,
                   child: const Text('get auth token '),
                 ),
               ],
             ),
             const Divider(),
-            const Text(
+            Text(
               'Player State',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
             _connected
                 ? _buildPlayerStateWidget()
@@ -174,12 +161,9 @@ class _HomeState extends State<Home> {
                     child: Text('Not connected'),
                   ),
             const Divider(),
-            const Text(
+            Text(
               'Player Context',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
             _connected
                 ? _buildPlayerContextWidget()
@@ -187,47 +171,74 @@ class _HomeState extends State<Home> {
                     child: Text('Not connected'),
                   ),
             const Divider(),
-            const Text(
+            Text(
               'Player Api',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-            Row(
+            Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                TextButton(
+                ElevatedButton(
                   onPressed: seekTo,
                   child: const Text('seek to 20000ms'),
                 ),
-                TextButton(
+                ElevatedButton(
                   onPressed: seekToRelative,
                   child: const Text('seek to relative 20000ms'),
                 ),
               ],
             ),
             const Divider(),
-            const Text(
-              'Crossfade State',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+            Text(
+              'Connect Api',
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-            ElevatedButton(
-              onPressed: getCrossfadeState,
-              child: Text(
-                'get crossfade state',
-              ),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ElevatedButton(
+                  onPressed: switchToLocalDevice,
+                  child: const Text('switch to local device'),
+                ),
+              ],
             ),
-            // ignore: prefer_single_quotes
-            Text("Is enabled: ${crossfadeState?.isEnabled}"),
-            // ignore: prefer_single_quotes
-            Text("Duration: ${crossfadeState?.duration}"),
             const Divider(),
-            _connected
-                ? spotifyImageWidget()
-                : const Text('Connect to see an image...'),
+            Text(
+              'Crossfade State',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  'Status',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                Text(
+                    crossfadeState?.isEnabled == true ? 'Enabled' : 'Disabled'),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    'Duration',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                Text(crossfadeState?.duration.toString() ?? 'Unknown'),
+                Row(
+                  children: <Widget>[
+                    ElevatedButton(
+                      onPressed: getCrossfadeState,
+                      child: const Text(
+                        'get crossfade state',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ],
         ),
         _loading
@@ -244,6 +255,7 @@ class _HomeState extends State<Home> {
       stream: SpotifySdk.subscribePlayerState(),
       builder: (BuildContext context, AsyncSnapshot<PlayerState> snapshot) {
         var track = snapshot.data?.track;
+        currentTrackImageUri = track?.imageUri;
         var playerState = snapshot.data;
 
         if (playerState == null || track == null) {
@@ -253,11 +265,90 @@ class _HomeState extends State<Home> {
         }
 
         return Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: <Widget>[
+                SizedIconButton(
+                  width: 50,
+                  icon: Icons.skip_previous,
+                  onPressed: skipPrevious,
+                ),
+                playerState.isPaused
+                    ? SizedIconButton(
+                        width: 50,
+                        icon: Icons.play_arrow,
+                        onPressed: resume,
+                      )
+                    : SizedIconButton(
+                        width: 50,
+                        icon: Icons.pause,
+                        onPressed: pause,
+                      ),
+                SizedIconButton(
+                  width: 50,
+                  icon: Icons.skip_next,
+                  onPressed: skipNext,
+                ),
+              ],
+            ),
+            track.isPodcast
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      TextButton(
+                        child: const SizedBox(
+                          width: 50,
+                          child: Text("x0.5"),
+                        ),
+                        onPressed: () => setPlaybackSpeed(
+                            PodcastPlaybackSpeed.playbackSpeed_50),
+                      ),
+                      TextButton(
+                        child: const SizedBox(
+                          width: 50,
+                          child: Text("x1"),
+                        ),
+                        onPressed: () => setPlaybackSpeed(
+                            PodcastPlaybackSpeed.playbackSpeed_100),
+                      ),
+                      TextButton(
+                        child: const SizedBox(
+                          width: 50,
+                          child: Text("x1.5"),
+                        ),
+                        onPressed: () => setPlaybackSpeed(
+                            PodcastPlaybackSpeed.playbackSpeed_150),
+                      ),
+                      TextButton(
+                        child: const SizedBox(
+                          width: 50,
+                          child: Text("x3.0"),
+                        ),
+                        onPressed: () => setPlaybackSpeed(
+                            PodcastPlaybackSpeed.playbackSpeed_300),
+                      ),
+                    ],
+                  )
+                : Container(),
             Text(
-                '${track.name} by ${track.artist.name} from the album ${track.album.name}'),
+              'Track',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            Text(
+              '${track.name} by ${track.artist.name} from the album ${track.album.name}',
+              maxLines: 2,
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(
+                'Playback',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -273,18 +364,21 @@ class _HomeState extends State<Home> {
                 Text('Shuffling: ${playerState.playbackOptions.isShuffling}'),
               ],
             ),
-            Text('RepeatMode: ${playerState.playbackOptions.repeatMode}'),
-            Text('Image URI: ${track.imageUri.raw}'),
-            Text('Is episode? ${track.isEpisode}'),
-            Text('Is podcast? ${track.isPodcast}'),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Divider(),
-                const Text(
-                  'Set Shuffle and Repeat',
-                  style: TextStyle(fontSize: 16),
-                ),
+                Text('Is episode: ${track.isEpisode}'),
+                Text('Is podcast: ${track.isPodcast}'),
+              ],
+            ),
+            Row(
+              children: [
+                Text('RepeatMode: ${playerState.playbackOptions.repeatMode}'),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
                 Row(
                   children: [
                     const Text(
@@ -293,7 +387,7 @@ class _HomeState extends State<Home> {
                     DropdownButton<RepeatMode>(
                       value: RepeatMode
                           .values[playerState.playbackOptions.repeatMode.index],
-                      items: [
+                      items: const [
                         DropdownMenuItem(
                           value: RepeatMode.off,
                           child: Text('off'),
@@ -313,7 +407,7 @@ class _HomeState extends State<Home> {
                 ),
                 Row(
                   children: [
-                    Text('Set shuffle: '),
+                    const Text('Switch shuffle: '),
                     Switch.adaptive(
                       value: playerState.playbackOptions.isShuffling,
                       onChanged: (bool shuffle) => setShuffle(
@@ -323,6 +417,16 @@ class _HomeState extends State<Home> {
                   ],
                 ),
               ],
+            ),
+            _connected
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
+                    child: spotifyImageWidget(track.imageUri),
+                  )
+                : const Text('Connect to see an image...'),
+            Text(
+              track.imageUri.raw,
+              style: Theme.of(context).textTheme.labelSmall,
             ),
           ],
         );
@@ -343,24 +447,51 @@ class _HomeState extends State<Home> {
         }
 
         return Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            Text('Title: ${playerContext.title}'),
-            Text('Subtitle: ${playerContext.subtitle}'),
-            Text('Type: ${playerContext.type}'),
-            Text('Uri: ${playerContext.uri}'),
+            Text(
+              'Title',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            Text(playerContext.title),
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(
+                'Subtitle',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            Text(playerContext.subtitle),
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(
+                'Type',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            Text(playerContext.type),
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(
+                'Uri',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            Text(
+              playerContext.uri,
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
           ],
         );
       },
     );
   }
 
-  Widget spotifyImageWidget() {
+  Widget spotifyImageWidget(ImageUri image) {
     return FutureBuilder(
         future: SpotifySdk.getImage(
-          imageUri: ImageUri(
-              'spotify:image:ab67616d0000b2736b4f6358fbf795b568e7952d'),
+          imageUri: image,
           dimension: ImageDimension.large,
         ),
         builder: (BuildContext context, AsyncSnapshot<Uint8List?> snapshot) {
@@ -433,9 +564,9 @@ class _HomeState extends State<Home> {
     }
   }
 
-  Future<String> getAuthenticationToken() async {
+  Future<String> getAccessToken() async {
     try {
-      var authenticationToken = await SpotifySdk.getAuthenticationToken(
+      var authenticationToken = await SpotifySdk.getAccessToken(
           clientId: dotenv.env['CLIENT_ID'].toString(),
           redirectUrl: dotenv.env['REDIRECT_URL'].toString(),
           scope: 'app-remote-control, '
@@ -531,6 +662,18 @@ class _HomeState extends State<Home> {
     }
   }
 
+  Future<void> setPlaybackSpeed(
+      PodcastPlaybackSpeed podcastPlaybackSpeed) async {
+    try {
+      await SpotifySdk.setPodcastPlaybackSpeed(
+          podcastPlaybackSpeed: podcastPlaybackSpeed);
+    } on PlatformException catch (e) {
+      setStatus(e.code, message: e.message);
+    } on MissingPluginException {
+      setStatus('not implemented');
+    }
+  }
+
   Future<void> play() async {
     try {
       await SpotifySdk.play(spotifyUri: 'spotify:track:58kNJana4w5BIjlZE2wq5m');
@@ -601,6 +744,16 @@ class _HomeState extends State<Home> {
     }
   }
 
+  Future<void> switchToLocalDevice() async {
+    try {
+      await SpotifySdk.switchToLocalDevice();
+    } on PlatformException catch (e) {
+      setStatus(e.code, message: e.message);
+    } on MissingPluginException {
+      setStatus('not implemented');
+    }
+  }
+
   Future<void> addToLibrary() async {
     try {
       await SpotifySdk.addToLibrary(
@@ -614,13 +767,14 @@ class _HomeState extends State<Home> {
 
   Future<void> checkIfAppIsActive(BuildContext context) async {
     try {
-      var isActive = await SpotifySdk.isSpotifyAppActive;
-      final snackBar = SnackBar(
-          content: Text(isActive
-              ? 'Spotify app connection is active (currently playing)'
-              : 'Spotify app connection is not active (currently not playing)'));
+      await SpotifySdk.isSpotifyAppActive.then((isActive) {
+        final snackBar = SnackBar(
+            content: Text(isActive
+                ? 'Spotify app connection is active (currently playing)'
+                : 'Spotify app connection is not active (currently not playing)'));
 
-      ScaffoldMessenger.of(context).showSnackBar(snackBar);
+        ScaffoldMessenger.of(context).showSnackBar(snackBar);
+      });
     } on PlatformException catch (e) {
       setStatus(e.code, message: e.message);
     } on MissingPluginException {

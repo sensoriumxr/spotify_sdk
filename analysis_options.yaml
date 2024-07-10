@@ -1,11 +1,10 @@
-include: package:pedantic/analysis_options.yaml
+include: package:flutter_lints/flutter.yaml
 
 analyzer:
   exclude:
     # Ignore generated files
     - "**/*.g.dart"
     - "lib/generated/**"
-    - "lib/models/**"
   errors:
     close_sinks: ignore
 linter:

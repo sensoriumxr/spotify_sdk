@@ -1,0 +1,38 @@
+name: spotify_sdk
+on: pull_request
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - name: Install Dependencies
+        run: flutter packages get
+      - name: Format
+        run: dart format --set-exit-if-changed lib test example
+      - name: Analyze
+        run: flutter analyze lib test example
+      - name: Publish dry run
+        run: flutter pub publish --dry-run
+      - name: Build web version
+        run: |
+              cd example
+              flutter build web
+
+  pana:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: subosito/flutter-action@v2
+
+      - name: Install Dependencies
+        run: |
+          flutter packages get
+          flutter pub global activate pana
+          sudo apt-get install webp
+
+      - name: Verify Pub Score
+        run: ./.github/scripts/verify_pub_score.sh

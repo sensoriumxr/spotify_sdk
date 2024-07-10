@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
 
 import 'enums/image_dimension_enum.dart';
+import 'enums/podcast_playback_speed.dart';
 import 'enums/repeat_mode_enum.dart';
 import 'extensions/image_dimension_extension.dart';
+import 'extensions/podcast_playback_speed_extension.dart';
 import 'models/capabilities.dart';
 import 'models/connection_status.dart';
 import 'models/crossfade_state.dart';
@@ -19,8 +20,10 @@ import 'models/user_status.dart';
 import 'platform_channels.dart';
 
 export 'package:spotify_sdk/enums/image_dimension_enum.dart';
+export 'package:spotify_sdk/enums/podcast_playback_speed.dart';
 export 'package:spotify_sdk/enums/repeat_mode_enum.dart';
 export 'package:spotify_sdk/extensions/image_dimension_extension.dart';
+export 'package:spotify_sdk/extensions/podcast_playback_speed_extension.dart';
 
 ///
 /// [SpotifySdk] holds the functionality to connect via spotify remote or
@@ -49,7 +52,16 @@ class SpotifySdk {
       EventChannel(EventChannels.connectionStatus);
 
   //logging
-  static final Logger _logger = Logger();
+  static final Logger _logger = Logger(
+    //filter: CustomLogFilter(), // custom logfilter can be used to have logs in release mode
+    printer: PrettyPrinter(
+      methodCount: 2,
+      errorMethodCount: 8,
+      lineLength: 120,
+      colors: true,
+      printEmojis: true,
+    ),
+  );
 
   /// Connects to Spotify Remote, returning a [bool] for confirmation
   ///
@@ -84,7 +96,7 @@ class SpotifySdk {
     }
   }
 
-  /// Returns an authentication token as a [String]
+  /// Returns an access token as a [String]
   ///
   /// Required parameters are the [clientId] and the [redirectUrl] to
   /// authenticate with the Spotify Api.
@@ -95,11 +107,11 @@ class SpotifySdk {
   /// for more scopes and how to use them
   /// The token can be used to communicate with the web api
   /// iOS specific: You can optionally pass a [spotifyUri]. A blank string will play the user's last song or pick a random one. It will be ignored on platforms other than iOS.
-  /// Throws a [PlatformException] if retrieving the authentication token
+  /// Throws a [PlatformException] if retrieving the access token
   /// failed.
   /// Throws a [MissingPluginException] if the method is not implemented on
   /// the native platforms.
-  static Future<String> getAuthenticationToken(
+  static Future<String> getAccessToken(
       {required String clientId,
       required String redirectUrl,
       String spotifyUri = '',
@@ -107,7 +119,7 @@ class SpotifySdk {
       String? scope}) async {
     try {
       final authorization =
-          await _channel.invokeMethod(MethodNames.getAuthenticationToken, {
+          await _channel.invokeMethod(MethodNames.getAccessToken, {
         ParamNames.clientId: clientId,
         ParamNames.redirectUrl: redirectUrl,
         ParamNames.scope: scope,
@@ -116,10 +128,25 @@ class SpotifySdk {
       });
       return authorization.toString();
     } on Exception catch (e) {
-      _logException(MethodNames.getAuthenticationToken, e);
+      _logException(MethodNames.getAccessToken, e);
       rethrow;
     }
   }
+
+  @Deprecated('Use [getAccessToken]')
+  static Future<String> getAuthenticationToken(
+          {required String clientId,
+          required String redirectUrl,
+          String spotifyUri = '',
+          bool asRadio = false,
+          String? scope}) =>
+      getAccessToken(
+        clientId: clientId,
+        redirectUrl: redirectUrl,
+        spotifyUri: spotifyUri,
+        asRadio: asRadio,
+        scope: scope,
+      );
 
   /// Logs the user out and disconnects the app from the users spotify account
   ///
@@ -254,6 +281,25 @@ class SpotifySdk {
   static Future resume() async {
     try {
       await _channel.invokeMethod(MethodNames.resume);
+    } on Exception catch (e) {
+      _logException(MethodNames.resume, e);
+      rethrow;
+    }
+  }
+
+  /// Sets the playbackSpeed of the Podcast
+  ///
+  /// The podcast playback speed can be controlled via [podcastPlaybackSpeed].
+  /// This can only be set if the podcast is played on the local device
+  /// the same device the app is running on.
+  /// Throws a [PlatformException] if resuming failed
+  /// Throws a [MissingPluginException] if the method is not implemented on
+  /// the native platforms.
+  static Future setPodcastPlaybackSpeed(
+      {required PodcastPlaybackSpeed podcastPlaybackSpeed}) async {
+    try {
+      await _channel.invokeMethod(MethodNames.setPodcastPlaybackSpeed,
+          {ParamNames.podcastPlaybackSpeed: podcastPlaybackSpeed.value});
     } on Exception catch (e) {
       _logException(MethodNames.resume, e);
       rethrow;
@@ -400,6 +446,20 @@ class SpotifySdk {
           {ParamNames.relativeMilliseconds: relativeMilliseconds});
     } on Exception catch (e) {
       _logException(MethodNames.seekToRelativePosition, e);
+      rethrow;
+    }
+  }
+
+  /// Switch to local device for playback
+  ///
+  /// Throws a [PlatformException] if switching to local device failed
+  /// Throws a [MissingPluginException] if the method is not implemented on
+  /// the native platforms.
+  static Future switchToLocalDevice() async {
+    try {
+      await _channel.invokeMethod(MethodNames.switchToLocalDevice);
+    } on Exception catch (e) {
+      _logException(MethodNames.switchToLocalDevice, e);
       rethrow;
     }
   }
@@ -606,11 +666,11 @@ class SpotifySdk {
     if (e is PlatformException) {
       var message = e.message ?? '';
       message += e.details != null ? '\n${e.details}' : '';
-      _logger.i('$method failed with: $message');
+      _logger.e('$method failed with: $message');
     } else if (e is MissingPluginException) {
-      _logger.i('$method not implemented');
+      _logger.e('$method not implemented');
     } else {
-      _logger.i('$method throws unhandled exception: ${e.toString()}');
+      _logger.e('$method throws unhandled exception: ${e.toString()}');
     }
   }
 }
